@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoCultivo — Invernadero hidropónico interactivo</title>
+<meta name="description" content="App educativa para Android: recorre en 3D un invernadero hidropónico NFT en la azotea de un edificio. Descarga el APK.">
+<meta property="og:title" content="EcoCultivo — Invernadero hidropónico interactivo">
+<meta property="og:description" content="Recorre en 3D un invernadero hidropónico en la azotea de un edificio. Descarga gratis para Android.">
+<meta property="og:image" content="Docs/capturas/invernadero_vista_inicial.png">
+<meta name="theme-color" content="#1F3D2A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------ tokens */
+  :root {
+    --hoja-oscuro: #1F3D2A;
+    --hoja: #3F8F4A;
+    --hoja-claro: #9BCB8A;
+    --agua: #2A9FD6;
+    --agua-texto: #146D99;     /* azul legible sobre fondo claro */
+    --concreto: #E6E8E3;
+    --concreto-2: #D5D9D2;
+    --pvc: #F3F4F0;
+    --carbon: #2E3236;
+    --carbon-suave: #535A60;
+    --blanco: #FFFFFF;
+
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --texto: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+
+    --medida: 64ch;
+    --radio: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--texto);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    color: var(--carbon);
+    background: var(--concreto);
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--agua-texto); text-underline-offset: 3px; }
+  a:focus-visible, .boton:focus-visible {
+    outline: 3px solid var(--agua);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  .contenedor { width: min(1120px, 100% - 32px); margin-inline: auto; }
+
+  h1, h2, h3 { font-family: var(--display); line-height: 1.1; margin: 0; }
+  h2 { font-size: clamp(1.75rem, 1.2rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.01em; }
+  h3 { font-size: 1.2rem; font-weight: 700; }
+  p { margin: 0; }
+
+  /* ------------------------------------------------------------------ portada */
+  .portada {
+    background: var(--hoja-oscuro);
+    color: var(--pvc);
+    padding: clamp(40px, 7vw, 88px) 0 clamp(48px, 7vw, 96px);
+    overflow: hidden;
+  }
+  .portada .contenedor {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: clamp(32px, 5vw, 72px);
+    align-items: center;
+  }
+  .marca {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--display); font-weight: 700; font-size: 1.05rem;
+    color: var(--hoja-claro);
+    margin-bottom: 28px;
+  }
+  .marca svg { flex: none; }
+  .portada h1 {
+    font-size: clamp(2.6rem, 1.4rem + 5vw, 4.75rem);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 0.98;
+  }
+  .portada .bajada {
+    margin-top: 22px;
+    font-size: clamp(1.1rem, 1rem + 0.4vw, 1.3rem);
+    max-width: 34ch;
+    color: #DCE7DD;
+  }
+  .acciones { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin-top: 34px; }
+  .boton {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 16px 26px;
+    border-radius: 999px;
+    background: var(--agua);
+    color: #06263A;
+    font-family: var(--display); font-weight: 700; font-size: 1.1rem;
+    text-decoration: none;
+    box-shadow: 0 6px 0 #1B6E96;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .boton:hover { transform: translateY(-1px); box-shadow: 0 7px 0 #1B6E96; }
+  .boton:active { transform: translateY(4px); box-shadow: 0 2px 0 #1B6E96; }
+  .portada .secundario { color: #DCE7DD; font-weight: 700; }
+  .nota-descarga { margin-top: 16px; font-size: 0.95rem; color: #B9CDBC; }
+
+  /* ------------------------------------------------------------------ diagrama NFT */
+  .diagrama { width: 100%; max-width: 520px; justify-self: center; }
+  .diagrama svg { width: 100%; height: auto; overflow: visible; }
+  .diagrama figcaption { margin-top: 10px; font-size: 0.95rem; color: #B9CDBC; text-align: center; }
+
+  .agua { transform-box: fill-box; animation: llenar .8s cubic-bezier(.4,0,.2,1) both; }
+  .agua.der { transform-origin: left center; }
+  .agua.izq { transform-origin: right center; }
+  .gota { opacity: 0; animation: caer .55s ease-in both; }
+  @keyframes llenar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes caer {
+    0% { opacity: 0; transform: translateY(-6px); }
+    15% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(46px); }
+  }
+  .nivel-0 { animation-delay: .35s; } .gota-0 { animation-delay: 1.05s; }
+  .nivel-1 { animation-delay: 1.25s; } .gota-1 { animation-delay: 1.95s; }
+  .nivel-2 { animation-delay: 2.15s; } .gota-2 { animation-delay: 2.85s; }
+  .nivel-3 { animation-delay: 3.05s; } .gota-3 { animation-delay: 3.75s; }
+  .nivel-4 { animation-delay: 3.95s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .agua, .gota, .boton { animation: none !important; transition: none !important; }
+    .gota { opacity: 0; }
+  }
+
+  /* ------------------------------------------------------------------ secciones */
+  section { padding: clamp(56px, 8vw, 104px) 0; }
+  .intro { max-width: var(--medida); margin-top: 16px; color: var(--carbon-suave); }
+
+  .funciones-lista {
+    list-style: none; padding: 0; margin: 44px 0 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 34px 56px;
+  }
+  .funciones-lista li { display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start; }
+  .funciones-lista p { margin-top: 6px; color: var(--carbon-suave); max-width: 46ch; }
+  .icono {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--hoja-oscuro);
+  }
+
+  /* Instalación: es una secuencia real, por eso va numerada */
+  .instalar { background: var(--pvc); }
+  .instalar .contenedor { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: clamp(32px, 6vw, 80px); align-items: start; }
+  .pasos { list-style: none; counter-reset: paso; margin: 0; padding: 0; }
+  .pasos li {
+    counter-increment: paso;
+    position: relative;
+    padding: 0 0 30px 62px;
+    border-left: 2px solid var(--concreto-2);
+    margin-left: 20px;
+  }
+  .pasos li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .pasos li::before {
+    content: counter(paso);
+    position: absolute; left: -21px; top: -4px;
+    width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--hoja); color: var(--blanco);
+    font-family: var(--display); font-weight: 800;
+  }
+  .pasos p { margin-top: 6px; color: var(--carbon-suave); max-width: 52ch; }
+  .aviso {
+    margin-top: 28px; padding: 16px 18px;
+    border-left: 4px solid var(--agua);
+    background: #E3F1F8; border-radius: 0 var(--radio) var(--radio) 0;
+    font-size: 0.98rem; max-width: 52ch;
+  }
+
+  /* Capturas */
+  .galeria {
+    margin-top: 40px;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .galeria figure { margin: 0; }
+  .galeria img {
+    width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+    border-radius: var(--radio);
+    background: var(--concreto-2);
+  }
+  .galeria figcaption { margin-top: 8px; font-size: 0.95rem; color: var(--carbon-suave); }
+
+  /* Requisitos y controles */
+  .datos { background: var(--hoja-oscuro); color: var(--pvc); }
+  .datos .contenedor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(32px, 6vw, 80px); }
+  .datos dl { margin: 24px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 12px 24px; }
+  .datos dt { font-weight: 700; color: var(--hoja-claro); }
+  .datos dd { margin: 0; color: #DCE7DD; }
+
+  /* Pie */
+  footer { padding: 48px 0 56px; font-size: 0.98rem; color: var(--carbon-suave); }
+  footer .contenedor { display: flex; flex-wrap: wrap; gap: 20px 48px; justify-content: space-between; align-items: flex-end; }
+  footer strong { color: var(--carbon); }
+
+  /* ------------------------------------------------------------------ móvil */
+  @media (max-width: 860px) {
+    .portada .contenedor, .instalar .contenedor, .datos .contenedor { grid-template-columns: 1fr; }
+    .diagrama { max-width: 440px; }
+    .funciones-lista { grid-template-columns: 1fr; gap: 28px; }
+    .galeria { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) {
+    .boton { width: 100%; justify-content: center; }
+    .datos dl { grid-template-columns: 1fr; gap: 4px; }
+    .datos dd { margin-bottom: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======================================================== PORTADA -->
+<header class="portada">
+  <div class="contenedor">
+    <div>
+      <div class="marca">
+        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+          <path d="M14 3c6 4 9 9 9 13a9 9 0 0 1-18 0c0-4 3-9 9-13z" fill="#3F8F4A"/>
+          <path d="M14 10v14" stroke="#9BCB8A" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        EcoCultivo
+      </div>
+      <h1>Un invernadero hidropónico en la azotea de tu ciudad</h1>
+      <p class="bajada">Recorre en 3D un sistema de cultivo vertical NFT, enciende la bomba y mira cómo el agua baja canal por canal.</p>
+
+      <div class="acciones">
+        <a class="boton" href="https://github.com/fearcego29-sudo/EcoCultivo/releases/latest/download/EcoCultivo.apk" download>
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Descargar para Android
+        </a>
+        <a class="secundario" href="https://github.com/fearcego29-sudo/EcoCultivo">Ver el código en GitHub</a>
+      </div>
+      <p class="nota-descarga">Archivo APK gratuito. Requiere Android 8.0 o superior.</p>
+    </div>
+
+    <!-- Corte transversal de un macetero NFT: el agua entra arriba y baja en zigzag -->
+    <figure class="diagrama">
+      <svg viewBox="0 0 420 380" role="img" aria-labelledby="diag-titulo">
+        <title id="diag-titulo">Corte de un sistema NFT: el agua llena el canal superior y baja por gravedad a los canales de abajo en zigzag.</title>
+        <!-- estructura -->
+        <g stroke="#3B5A45" stroke-width="6" stroke-linecap="round">
+          <line x1="70" y1="20" x2="70" y2="368"/>
+          <line x1="350" y1="20" x2="350" y2="368"/>
+        </g>
+        <!-- tuberías de bajada (zigzag) -->
+        <g stroke="#F3F4F0" stroke-width="8" fill="none" stroke-linecap="round">
+          <path d="M330 62 v42"/>
+          <path d="M90 132 v42"/>
+          <path d="M330 202 v42"/>
+          <path d="M90 272 v42"/>
+        </g>
+        <!-- entrada de la bomba -->
+        <path d="M400 8 H330 v30" stroke="#F3F4F0" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- canales (PVC) -->
+        <g fill="#F3F4F0">
+          <rect x="70" y="38" width="280" height="30" rx="15"/>
+          <rect x="70" y="108" width="280" height="30" rx="15"/>
+          <rect x="70" y="178" width="280" height="30" rx="15"/>
+          <rect x="70" y="248" width="280" height="30" rx="15"/>
+          <rect x="70" y="318" width="280" height="30" rx="15"/>
+        </g>
+        <!-- agua: alterna la dirección en cada nivel -->
+        <g fill="#2A9FD6">
+          <rect class="agua izq nivel-0" x="80" y="52" width="260" height="10" rx="5"/>
+          <rect class="agua der nivel-1" x="80" y="122" width="260" height="10" rx="5"/>
+          <rect class="agua izq nivel-2" x="80" y="192" width="260" height="10" rx="5"/>
+          <rect class="agua der nivel-3" x="80" y="262" width="260" height="10" rx="5"/>
+          <rect class="agua izq nivel-4" x="80" y="332" width="260" height="10" rx="5"/>
+        </g>
+        <!-- gotas que bajan entre niveles -->
+        <g fill="#7CC8EE">
+          <circle class="gota gota-0" cx="90" cy="72" r="5"/>
+          <circle class="gota gota-1" cx="330" cy="142" r="5"/>
+          <circle class="gota gota-2" cx="90" cy="212" r="5"/>
+          <circle class="gota gota-3" cx="330" cy="282" r="5"/>
+        </g>
+        <!-- plantas sobre cada canal -->
+        <g id="plantas">
+          <g transform="translate(0,0)">
+            <circle cx="120" cy="32" r="11" fill="#3F8F4A"/><circle cx="180" cy="30" r="13" fill="#58A55B"/><circle cx="240" cy="32" r="11" fill="#3F8F4A"/><circle cx="300" cy="30" r="12" fill="#58A55B"/>
+          </g>
+        </g>
+        <use href="#plantas" y="70"/>
+        <use href="#plantas" y="140"/>
+        <use href="#plantas" y="210"/>
+        <use href="#plantas" y="280"/>
+      </svg>
+      <figcaption>Así funciona el riego NFT dentro de la app: el agua entra arriba y baja por gravedad.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+  <!-- ======================================================== FUNCIONES -->
+  <section aria-labelledby="t-funciones">
+    <div class="contenedor">
+      <h2 id="t-funciones">Qué puedes hacer en EcoCultivo</h2>
+      <p class="intro">Una forma visual de entender cómo se puede producir alimento en espacios urbanos que hoy no se aprovechan, usando menos agua y sin suelo.</p>
+
+      <ul class="funciones-lista">
+        <li>
+          <span class="icono" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z" fill="#2A9FD6"/></svg>
+          </span>
+          <div>
+            <h3>Encender el riego</h3>
+            <p>El agua recorre cada canal de un extremo al otro y baja al siguiente nivel, con el porcentaje de llenado en pantalla.</p>
+          </div>
+        </li>
+        <li>
+          <span class="icono" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="#F2C230"/></svg>
+          </span>
+          <div>
+            <h3>Cambiar entre día y noche</h3>
+            <p>De noche se encienden las lámparas de cultivo sobre los maceteros y las ventanas de los edificios vecinos.</p>
+          </div>
+        </li>
+        <li>
+          <span class="icono" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9BCB8A" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="#9BCB8A"/></svg>
+          </span>
+          <div>
+            <h3>Recorrer la azotea</h3>
+            <p>Muévete con el joystick y gira la vista con el otro dedo: paneles solares, tinacos, huerto urbano y la ciudad alrededor.</p>
+          </div>
+        </li>
+        <li>
+          <span class="icono" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9BCB8A" stroke-width="2.2" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
+          </span>
+          <div>
+            <h3>Conocer el proyecto</h3>
+            <p>Consulta el objetivo del sistema hidropónico y los créditos desde el menú de la app.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ======================================================== INSTALACIÓN -->
+  <section class="instalar" aria-labelledby="t-instalar">
+    <div class="contenedor">
+      <div>
+        <h2 id="t-instalar">Cómo instalarla</h2>
+        <p class="intro">La app no está en Play Store: se instala directamente desde el archivo APK. Toma menos de un minuto.</p>
+        <p class="aviso">Android te pedirá permiso para instalar una app descargada del navegador. Es normal en apps que no vienen de Play Store.</p>
+      </div>
+      <ol class="pasos">
+        <li>
+          <h3>Descarga el APK</h3>
+          <p>Desde tu teléfono, toca <a href="https://github.com/fearcego29-sudo/EcoCultivo/releases/latest/download/EcoCultivo.apk">Descargar para Android</a>. Si el navegador avisa que el archivo puede ser dañino, elige <em>Descargar de todos modos</em>.</p>
+        </li>
+        <li>
+          <h3>Abre el archivo</h3>
+          <p>Toca la notificación de descarga terminada, o búscalo en la app <em>Archivos</em> dentro de <em>Descargas</em>.</p>
+        </li>
+        <li>
+          <h3>Permite la instalación</h3>
+          <p>Si aparece el aviso, toca <em>Configuración</em> y activa <em>Permitir de esta fuente</em>. Luego regresa.</p>
+        </li>
+        <li>
+          <h3>Instala y abre EcoCultivo</h3>
+          <p>Toca <em>Instalar</em>. Si Play Protect pregunta, elige <em>Instalar de todas formas</em>. La app aparecerá en tu pantalla de inicio.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ======================================================== CAPTURAS -->
+  <section aria-labelledby="t-capturas">
+    <div class="contenedor">
+      <h2 id="t-capturas">Dentro del invernadero</h2>
+      <div class="galeria">
+        <figure>
+          <img src="Docs/capturas/invernadero_vista_inicial.png" alt="Vista general del invernadero con los cuatro maceteros verticales y las lámparas de cultivo" loading="lazy">
+          <figcaption>Cuatro maceteros verticales con canales NFT.</figcaption>
+        </figure>
+        <figure>
+          <img src="Docs/capturas/macetero_estructura.png" alt="Pasillo central entre dos maceteros escalonados con plantas" loading="lazy">
+          <figcaption>Canales escalonados en forma de A.</figcaption>
+        </figure>
+        <figure>
+          <img src="Docs/capturas/macetero_estructura2.png" alt="Estructura de tubos PVC y canales de cultivo vista de lado" loading="lazy">
+          <figcaption>Estructura de PVC y lámparas de cultivo.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== REQUISITOS Y CONTROLES -->
+  <section class="datos" aria-labelledby="t-req">
+    <div class="contenedor">
+      <div>
+        <h2 id="t-req">Requisitos</h2>
+        <dl>
+          <dt>Sistema</dt><dd>Android 8.0 (Oreo) o superior</dd>
+          <dt>Procesador</dt><dd>64 bits (ARM64)</dd>
+          <dt>Versión</dt><dd>1.0.0</dd>
+          <dt>Conexión</dt><dd>No necesita internet después de instalarla</dd>
+        </dl>
+      </div>
+      <div>
+        <h2>Controles</h2>
+        <dl>
+          <dt>Moverte</dt><dd>Joystick en la mitad izquierda de la pantalla</dd>
+          <dt>Mirar</dt><dd>Arrastra el dedo en la mitad derecha</dd>
+          <dt>Regresar</dt><dd>Botón Atrás de Android</dd>
+          <dt>Calidad</dt><dd>Menú ≡ dentro de la vista 3D</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="contenedor">
+    <p><strong>EcoCultivo</strong> es un proyecto de Felipe Cervera para la asignatura Gráficos por Computadora,<br>Universidad Marista de Mérida. Profesor: Luis de Jesús López Hernández.</p>
+    <p><a href="https://github.com/fearcego29-sudo/EcoCultivo">Código fuente en GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
