@@ -1,0 +1,16 @@
+# Normaliza finales de línea de los archivos de texto (scripts y YAML de Unity).
+* text=auto
+
+# Archivos binarios: no se comparan ni se convierten.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.psd binary
+*.tga binary
+*.fbx binary
+*.FBX binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary

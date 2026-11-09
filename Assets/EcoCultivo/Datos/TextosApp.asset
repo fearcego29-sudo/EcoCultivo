@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 041699157dcf4f74082955f0e223ffae, type: 3}
+  m_Name: TextosApp
+  m_EditorClassIdentifier: Assembly-CSharp::TextosApp
+  tituloSplash: EcoCultivo AR
+  tituloMenu: PROYECTO ECOCULTIVO
+  botonVisualizador: Visualizador 3D / AR
+  botonObjetivo: Objetivo del Proyecto
+  botonCreditos: "Cr\xE9ditos"
+  tituloObjetivo: OBJETIVO DEL PROYECTO
+  descripcionObjetivo: "## \xBFQu\xE9 es?\nUn prototipo interactivo 3D y de Realidad Aumentada para visualizar y analizar el sistema de cultivo hidrop\xF3nico vertical EcoCultivo.\n## \xBFQu\xE9 busca?\nOptimizar el uso del espacio y de los recursos h\xEDdricos en invernaderos.\n## \xBFQu\xE9 puedes explorar?\nLa supervisi\xF3n modular del flujo de agua y de la iluminaci\xF3n, pensada para una producci\xF3n sustentable en la regi\xF3n."
+  botonVolverObjetivo: "Volver al Men\xFA"
+  tituloCreditos: "CR\xC9DITOS Y DATOS DEL PROYECTO"
+  datosAlumno: "<b>Alumno:</b> Felipe Cervera\n<b>Universidad:</b> Universidad Marista de M\xE9rida\n<b>Asignatura:</b> Gr\xE1ficos por Computadora\n<b>Profesor:</b> Luis de Jes\xFAs L\xF3pez Hern\xE1ndez\n<b>Proyecto:</b> EcoCultivo AR (Sistema Hidrop\xF3nico)"
+  botonVolverCreditos: "\u2190 Volver al Men\xFA"
+  botonMenuAR: "\u2261"
+  botonDiaNoche: "D\xEDa / Noche"
+  botonFlujoAgua: Flujo de Agua
+  botonResetCamara: "Reset C\xE1mara"

@@ -1,0 +1,60 @@
+# ===================== Unity (generado automáticamente: NO se sube) =====================
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/ProfilerCaptures/
+
+# Carpetas temporales / vacías de este proyecto
+/.utmp/
+/New Folder/
+
+# Archivos de proyecto de IDE (Unity los vuelve a generar)
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Metadatos de símbolos de depuración
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Compilaciones de Android
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Reportes de errores
+sysinfo.txt
+crashlytics-build.properties
+
+# Addressables (generados)
+/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
