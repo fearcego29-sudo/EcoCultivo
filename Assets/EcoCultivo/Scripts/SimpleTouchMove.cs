@@ -26,6 +26,17 @@ using UnityEngine.EventSystems;
 /// - Expone el estado (JoystickActivo, JoystickOrigen, JoystickVector, VistaActiva, VistaPosicion)
 ///   para que JoystickVisual lo dibuje en pantalla.
 ///
+/// CAMBIOS (Ronda 8 — control más suave):
+/// - Giro con dos pulgares: antes, al apoyar el segundo dedo la cámara podía dar un giro
+///   brusco. Android a veces reporta un deltaPosition enorme (salto) cuando entra o sale
+///   otro dedo. Ahora el desplazamiento se calcula con la última posición conocida de ESE
+///   dedo, se ignora el frame en que aparece un dedo nuevo y se descartan saltos mayores a
+///   maxSaltoPorFrame.
+/// - Suavizado: el giro y el movimiento se interpolan (suavizadoGiro / suavizadoMovimiento),
+///   así arrancan y frenan sin tirones.
+/// - La sensibilidad de giro se normaliza a una pantalla de 1080 px de alto: se siente igual
+///   en teléfonos y tabletas con distinta resolución.
+///
 /// Rendimiento: cero allocations por frame. El raycast contra la UI solo se hace en
 /// TouchPhase.Began, reutilizando la misma lista y el mismo PointerEventData.
 /// </summary>
@@ -48,6 +59,14 @@ public class SimpleTouchMove : MonoBehaviour
     [Tooltip("Zona muerta: desplazamientos menores no mueven la cámara.")]
     [Range(0f, 0.5f)] public float zonaMuerta = 0.12f;
 
+    [Header("Suavizado (Ronda 8)")]
+    [Tooltip("Qué tan rápido la vista alcanza al dedo. Más alto = más directo; más bajo = más suave.")]
+    [Range(2f, 30f)] public float suavizadoGiro = 14f;
+    [Tooltip("Aceleración y frenado del movimiento. Más alto = más directo; más bajo = más suave.")]
+    [Range(2f, 30f)] public float suavizadoMovimiento = 8f;
+    [Tooltip("Saltos del dedo mayores a esta fracción del alto de pantalla (en un solo frame) se ignoran.")]
+    [Range(0.02f, 0.3f)] public float maxSaltoPorFrame = 0.12f;
+
     // ---------- Estado público (lectura) para JoystickVisual ----------
     public bool JoystickActivo { get { return leftTouchId != -1; } }
     /// <summary>Centro del joystick en píxeles de pantalla.</summary>
@@ -60,8 +79,17 @@ public class SimpleTouchMove : MonoBehaviour
     /// <summary>Radio del joystick en píxeles de pantalla.</summary>
     public float RadioJoystickPx { get { return Screen.height * radioJoystick; } }
 
+    // Rotación aplicada (pitch/yaw) y rotación objetivo (a la que se acerca con suavizado).
     private float pitch = 0f;
     private float yaw = 0f;
+    private float pitchObjetivo = 0f;
+    private float yawObjetivo = 0f;
+
+    // Movimiento suavizado (m/s en mundo).
+    private Vector3 velocidad = Vector3.zero;
+
+    // Última posición conocida del dedo que gira (para calcular el delta sin depender de deltaPosition).
+    private Vector2 ultimaPosVista;
 
     // Dedo asignado a cada mitad (-1 = libre). El rol se fija en TouchPhase.Began.
     private int leftTouchId = -1;
@@ -93,17 +121,19 @@ public class SimpleTouchMove : MonoBehaviour
         if (soloEnVistaAR && !UIManager.PermitirControlCamara)
         {
             LiberarDedos();
+            velocidad = Vector3.zero;
             return;
         }
+
+        float dt = Time.deltaTime;
+        Vector3 velObjetivo = Vector3.zero;
 
         // 1. MOVIMIENTO TECLADO (WASD / Flechas para PC)
         float h = Input.GetAxis("Horizontal");
         float v = Input.GetAxis("Vertical");
-
         if (h != 0f || v != 0f)
         {
-            Vector3 moveDir = tr.right * h + tr.forward * v;
-            tr.position += moveDir * moveSpeed * Time.deltaTime;
+            velObjetivo += (tr.right * h + tr.forward * v) * moveSpeed;
         }
 
         // 2. MOVIMIENTO TÁCTIL Y ROTACIÓN (Móvil / Tablet)
@@ -115,6 +145,17 @@ public class SimpleTouchMove : MonoBehaviour
         {
             LiberarDedos();
         }
+
+        // Si en este frame entra un dedo nuevo, Android puede reportar posiciones "saltadas"
+        // para los demás: ese frame no se aplica giro (solo se actualiza la última posición).
+        bool entroDedo = false;
+        for (int i = 0; i < touchCount; i++)
+        {
+            if (Input.GetTouch(i).phase == TouchPhase.Began) { entroDedo = true; break; }
+        }
+
+        float maxSaltoPx = Screen.height * maxSaltoPorFrame;
+        float escalaGiro = rotateSpeed * (1080f / Mathf.Max(1, Screen.height));
 
         for (int i = 0; i < touchCount; i++)
         {
@@ -134,11 +175,18 @@ public class SimpleTouchMove : MonoBehaviour
                         float radio = Mathf.Max(1f, RadioJoystickPx);
                         JoystickVector = Vector2.ClampMagnitude((touch.position - JoystickOrigen) / radio, 1f);
                     }
-                    else if (touch.fingerId == rightTouchId && touch.phase == TouchPhase.Moved)
+                    else if (touch.fingerId == rightTouchId)
                     {
-                        // Dedo que empezó a la derecha: rota, aunque ya esté a la izquierda.
-                        Rotar(touch.deltaPosition.x * rotateSpeed, touch.deltaPosition.y * rotateSpeed);
+                        // Delta propio (no touch.deltaPosition): posición actual − última posición de ESTE dedo.
+                        Vector2 delta = touch.position - ultimaPosVista;
+                        ultimaPosVista = touch.position;
                         VistaPosicion = touch.position;
+
+                        bool salto = delta.sqrMagnitude > maxSaltoPx * maxSaltoPx;
+                        if (!entroDedo && !salto && touch.phase == TouchPhase.Moved)
+                        {
+                            Rotar(delta.x * escalaGiro, delta.y * escalaGiro);
+                        }
                     }
                     break;
 
@@ -159,7 +207,7 @@ public class SimpleTouchMove : MonoBehaviour
             {
                 float fuerza = (m - zonaMuerta) / (1f - zonaMuerta); // 0..1 después de la zona muerta
                 Vector2 dir = j / m * fuerza;
-                tr.position += (tr.right * dir.x + tr.forward * dir.y) * moveSpeed * Time.deltaTime;
+                velObjetivo += (tr.right * dir.x + tr.forward * dir.y) * moveSpeed;
             }
         }
 
@@ -167,6 +215,22 @@ public class SimpleTouchMove : MonoBehaviour
         if (Input.GetMouseButton(1))
         {
             Rotar(Input.GetAxis("Mouse X") * 2f, Input.GetAxis("Mouse Y") * 2f);
+        }
+
+        // 4. APLICAR CON SUAVIZADO (independiente del frame rate)
+        float tMov = 1f - Mathf.Exp(-suavizadoMovimiento * dt);
+        velocidad = Vector3.Lerp(velocidad, velObjetivo, tMov);
+        if (velocidad.sqrMagnitude > 0.000001f)
+        {
+            tr.position += velocidad * dt;
+        }
+
+        if (Mathf.Abs(yawObjetivo - yaw) > 0.001f || Mathf.Abs(pitchObjetivo - pitch) > 0.001f)
+        {
+            float tGiro = 1f - Mathf.Exp(-suavizadoGiro * dt);
+            yaw = Mathf.Lerp(yaw, yawObjetivo, tGiro);
+            pitch = Mathf.Lerp(pitch, pitchObjetivo, tGiro);
+            tr.eulerAngles = new Vector3(pitch, yaw, 0f);
         }
     }
 
@@ -179,8 +243,9 @@ public class SimpleTouchMove : MonoBehaviour
         if (tr == null) tr = transform;
 
         Vector3 angles = tr.eulerAngles;
-        pitch = NormalizarAngulo(angles.x);
-        yaw = angles.y;
+        pitch = pitchObjetivo = NormalizarAngulo(angles.x);
+        yaw = yawObjetivo = angles.y;
+        velocidad = Vector3.zero;
         LiberarDedos();
     }
 
@@ -204,16 +269,16 @@ public class SimpleTouchMove : MonoBehaviour
             {
                 rightTouchId = touch.fingerId;
                 VistaPosicion = touch.position;
+                ultimaPosVista = touch.position;
             }
         }
     }
 
+    /// <summary>Acumula el giro en la rotación objetivo; Update la alcanza con suavizado.</summary>
     private void Rotar(float deltaYaw, float deltaPitch)
     {
-        yaw += deltaYaw;
-        pitch -= deltaPitch;
-        pitch = Mathf.Clamp(pitch, -80f, 80f);
-        tr.eulerAngles = new Vector3(pitch, yaw, 0f);
+        yawObjetivo += deltaYaw;
+        pitchObjetivo = Mathf.Clamp(pitchObjetivo - deltaPitch, -80f, 80f);
     }
 
     private void LiberarDedos()

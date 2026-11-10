@@ -15,6 +15,13 @@ using UnityEngine;
 /// Trabaja sobre los 36 objetos "Agua_Tuberia" existentes: solo cambia su escala y posición
 /// local. No crea objetos, no cambia materiales ni nombres.
 ///
+/// CAMBIOS (Ronda 8 — LOD):
+/// - El agua ahora desaparece junto con su macetero. Antes, al alejarse, el LOD Group de
+///   EstructuraMacetero ocultaba el macetero pero los canales de agua seguían visibles
+///   "flotando". Al iniciar, cada grupo Grupo_Agua_NFT se asocia al LOD Group más cercano
+///   y sus renderers se agregan a TODOS sus niveles (LOD0, LOD1, LOD2): se ven mientras el
+///   macetero se vea y se ocultan cuando el macetero se oculta. No cambia la escena guardada.
+///
 /// Rendimiento: solo hace trabajo durante la animación (~4 s): 36 transformaciones por frame
 /// (≈0.02 ms), sin basura (GC). Fuera de la animación, Update no hace nada.
 /// </summary>
@@ -53,6 +60,12 @@ public class RiegoNFT : MonoBehaviour
         public float sentido;    // -1: entra por el extremo −Z; +1: entra por +Z (zigzag)
     }
 
+    [Header("LOD (Ronda 8)")]
+    [Tooltip("Ocultar el agua junto con su macetero cuando el LOD Group lo oculta por distancia.")]
+    public bool vincularConLOD = true;
+    [Tooltip("Distancia máxima (m) entre el centro del agua y el centro del macetero para asociarlos.")]
+    public float distanciaMaxLOD = 3f;
+
     private Canal[] canales = new Canal[0];
     private bool animando;
     private bool preparado;
@@ -60,6 +73,76 @@ public class RiegoNFT : MonoBehaviour
     private void Awake()
     {
         Preparar();
+    }
+
+    private void Start()
+    {
+        if (vincularConLOD) VincularConLOD();
+    }
+
+    /// <summary>
+    /// Agrega los renderers de cada grupo de agua a todos los niveles del LOD Group de su
+    /// macetero (el más cercano). Se ejecuta una vez; sin costo por frame.
+    /// </summary>
+    private void VincularConLOD()
+    {
+        // LOD Groups de la escena (búsqueda desde las raíces, sin APIs obsoletas; solo al iniciar).
+        List<LODGroup> lista = new List<LODGroup>(8);
+        GameObject[] raices = gameObject.scene.GetRootGameObjects();
+        for (int i = 0; i < raices.Length; i++)
+            lista.AddRange(raices[i].GetComponentsInChildren<LODGroup>(true));
+        LODGroup[] grupos = lista.ToArray();
+        if (grupos.Length == 0) return;
+
+        // Centro de cada macetero = punto de referencia del LOD Group en el mundo.
+        Vector3[] centros = new Vector3[grupos.Length];
+        for (int i = 0; i < grupos.Length; i++)
+            centros[i] = grupos[i].transform.TransformPoint(grupos[i].localReferencePoint);
+
+        int vinculados = 0;
+        for (int g = 0; g < transform.childCount; g++)
+        {
+            Transform grupoAgua = transform.GetChild(g);
+            Renderer[] rends = grupoAgua.GetComponentsInChildren<Renderer>(true);
+            if (rends.Length == 0) continue;
+
+            // Centro del agua = promedio de las posiciones de sus canales (no depende de si están visibles).
+            Vector3 centro = Vector3.zero;
+            for (int r = 0; r < rends.Length; r++) centro += rends[r].transform.position;
+            centro /= rends.Length;
+
+            // LOD Group más cercano (en el plano horizontal: los niveles de agua van a distinta altura).
+            int mejor = -1;
+            float mejorDist = float.MaxValue;
+            for (int i = 0; i < grupos.Length; i++)
+            {
+                Vector3 d = centros[i] - centro;
+                d.y = 0f;
+                float dist = d.magnitude;
+                if (dist < mejorDist) { mejorDist = dist; mejor = i; }
+            }
+            if (mejor < 0 || mejorDist > distanciaMaxLOD)
+            {
+                Debug.LogWarning("[RiegoNFT] No se encontró un macetero (LOD Group) cerca de " + grupoAgua.name + ".", grupoAgua);
+                continue;
+            }
+
+            LOD[] lods = grupos[mejor].GetLODs();
+            for (int l = 0; l < lods.Length; l++)
+            {
+                Renderer[] actuales = lods[l].renderers ?? new Renderer[0];
+                List<Renderer> nuevos = new List<Renderer>(actuales.Length + rends.Length);
+                nuevos.AddRange(actuales);
+                for (int r = 0; r < rends.Length; r++)
+                    if (!nuevos.Contains(rends[r])) nuevos.Add(rends[r]);
+                lods[l].renderers = nuevos.ToArray();
+            }
+            grupos[mejor].SetLODs(lods);
+            vinculados++;
+        }
+
+        if (vinculados > 0)
+            Debug.Log("[RiegoNFT] Agua vinculada al LOD de " + vinculados + " maceteros.", this);
     }
 
     /// <summary>Encuentra los canales y calcula el orden de llenado (una sola vez).</summary>

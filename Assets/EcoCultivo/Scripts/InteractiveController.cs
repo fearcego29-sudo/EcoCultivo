@@ -23,6 +23,13 @@ using UnityEngine;
 ///   Prioridad: ahorro (30) > transición (60) > menú (30) > vista 3D (60).
 /// - Expone EsNoche / AguaActiva y el evento EstadoCambiado (lo usa EstadoControlesAR
 ///   para resaltar los botones activos).
+///
+/// CAMBIOS (Ronda 8 — sombras de las lámparas):
+/// - Las 8 Spot Lights proyectan sombras de noche. Calidad BAJA: sombras duras (más
+///   baratas). Calidad ALTA: sombras suaves. Se ajusta solo al cambiar la calidad en el menú ≡.
+/// - shadowNearPlane se sube para que la pantalla de la lámpara no bloquee su propia luz.
+/// - Requiere en Mobile_RPAsset: Additional Lights > Cast Shadows activado y
+///   Per Object Limit = 8 (ver PASOS_UNITY.md, Ronda 8).
 /// </summary>
 public class InteractiveController : MonoBehaviour
 {
@@ -37,6 +44,14 @@ public class InteractiveController : MonoBehaviour
 
     [Tooltip("Luz ambiental de noche (antes 0.05). 0.15 deja ver el jardín exterior sin romper el ambiente nocturno.")]
     [Range(0f, 0.5f)] public float intensidadAmbienteNoche = 0.15f;
+
+    [Header("Sombras de las lámparas (Ronda 8)")]
+    [Tooltip("Las Spot Lights proyectan sombras en modo noche.")]
+    public bool sombrasLamparas = true;
+    [Tooltip("Distancia mínima (m) desde la luz a la que empieza a calcular sombras. Evita que la pantalla de la lámpara tape su propia luz.")]
+    [Range(0.05f, 1f)] public float sombraPlanoCercano = 0.3f;
+    [Tooltip("Intensidad de la sombra (1 = negra; menos = deja pasar algo de luz ambiental).")]
+    [Range(0f, 1f)] public float fuerzaSombra = 0.85f;
 
     [Header("Simulación de Agua")]
     public GameObject sistemaAguaPVC;
@@ -61,6 +76,8 @@ public class InteractiveController : MonoBehaviour
     private bool enTransicionUI = false;
     private UIManager ui;
     private RiegoNFT riego;
+    private CalidadGrafica calidad;
+    private Light[] lucesSpot = new Light[0];
 
     /// <summary>Animación de riego por etapas (null si no hay sistema de agua).</summary>
     public RiegoNFT Riego { get { return riego; } }
@@ -123,6 +140,12 @@ public class InteractiveController : MonoBehaviour
             if (riego == null) riego = sistemaAguaPVC.AddComponent<RiegoNFT>();
         }
 
+        // Spot Lights de las lámparas (incluye las inactivas: el grupo está apagado de día).
+        if (grupoSpotLights != null)
+        {
+            lucesSpot = grupoSpotLights.GetComponentsInChildren<Light>(true);
+        }
+
         // Guardar el "día" tal como está configurado en la escena.
         if (luzDireccional != null) intensidadLuzDia = luzDireccional.intensity;
         intensidadAmbienteDia = RenderSettings.ambientIntensity;
@@ -136,6 +159,7 @@ public class InteractiveController : MonoBehaviour
             ui.TransicionIniciada += AlIniciarTransicion;
             ui.PanelCambiado += AlCambiarPanel;
         }
+        if (calidad != null) calidad.CalidadCambiada += AplicarSombras;
     }
 
     private void OnDisable()
@@ -145,10 +169,31 @@ public class InteractiveController : MonoBehaviour
             ui.TransicionIniciada -= AlIniciarTransicion;
             ui.PanelCambiado -= AlCambiarPanel;
         }
+        if (calidad != null) calidad.CalidadCambiada -= AplicarSombras;
     }
 
     private void Start()
     {
+        // Sombras según la calidad actual (CalidadGrafica ya eligió su nivel en su Awake).
+        calidad = GetComponent<CalidadGrafica>();
+        if (calidad == null)
+        {
+            // Búsqueda en la escena sin APIs obsoletas (solo una vez, al iniciar).
+            GameObject[] raices = gameObject.scene.GetRootGameObjects();
+            for (int i = 0; i < raices.Length && calidad == null; i++)
+                calidad = raices[i].GetComponentInChildren<CalidadGrafica>(true);
+        }
+        if (calidad != null)
+        {
+            calidad.CalidadCambiada -= AplicarSombras; // por si OnEnable ya lo suscribió
+            calidad.CalidadCambiada += AplicarSombras;
+            AplicarSombras(calidad.Nivel);
+        }
+        else
+        {
+            AplicarSombras(NivelCalidad.Baja);
+        }
+
         if (riego != null)
         {
             // Con riego por etapas el grupo queda activo; cada canal se oculta/llena por separado.
@@ -206,6 +251,23 @@ public class InteractiveController : MonoBehaviour
             // Sin esto, SimpleTouchMove conserva su yaw/pitch anterior y el siguiente
             // giro devuelve la cámara a donde estaba antes del reset.
             if (controlCamara != null) controlCamara.SincronizarRotacion();
+        }
+    }
+
+    /// <summary>Sombras de las lámparas: duras en Baja, suaves en Alta (o ninguna si se desactivan).</summary>
+    private void AplicarSombras(NivelCalidad nivel)
+    {
+        LightShadows tipo = !sombrasLamparas ? LightShadows.None
+                          : nivel == NivelCalidad.Alta ? LightShadows.Soft
+                          : LightShadows.Hard;
+
+        for (int i = 0; i < lucesSpot.Length; i++)
+        {
+            Light l = lucesSpot[i];
+            if (l == null) continue;
+            l.shadows = tipo;
+            l.shadowNearPlane = sombraPlanoCercano;
+            l.shadowStrength = fuerzaSombra;
         }
     }
 
