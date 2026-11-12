@@ -187,6 +187,8 @@ public class RiegoNFT : MonoBehaviour
                     inicio = nivel * paso,
                     sentido = nivel % 2 == 0 ? -1f : 1f
                 };
+                // Ronda 9: el agua va dentro del canal; su sombra no se ve y solo cuesta dibujarla.
+                if (c.rend != null) c.rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 lista.Add(c);
             }
         }

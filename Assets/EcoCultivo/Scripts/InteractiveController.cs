@@ -30,6 +30,19 @@ using UnityEngine;
 /// - shadowNearPlane se sube para que la pantalla de la lámpara no bloquee su propia luz.
 /// - Requiere en Mobile_RPAsset: Additional Lights > Cast Shadows activado y
 ///   Per Object Limit = 8 (ver PASOS_UNITY.md, Ronda 8).
+///
+/// CAMBIOS (Ronda 9 — rendimiento de noche, conservando las sombras):
+/// - Sombra con malla simple (SombrasLOD): los maceteros proyectan su sombra con la malla
+///   del último LOD (~8 mil triángulos en lugar de ~41 mil). Se ven igual de detallados.
+/// - De noche el sol (luz direccional) deja de calcular sombras: con intensidad 0 no se
+///   ve, pero seguía dibujando su mapa de sombras. Al volver al día se restaura.
+///
+/// CAMBIOS (Ronda 10 — conos de las lámparas y sombras en calidad Baja):
+/// - Conos más cerrados (100° → 70°) y alcance 5 → 4 m: cada lámpara ilumina sobre todo su
+///   macetero, en vez de casi todo el invernadero. Menos objetos por sombra y menos pixeles
+///   que calcular. Las 8 lámparas siguen encendidas.
+/// - Calidad BAJA: solo 4 lámparas proyectan sombra (la más cercana a cada macetero). Las 8
+///   siguen alumbrando. Calidad ALTA: las 8 con sombra suave, como antes.
 /// </summary>
 public class InteractiveController : MonoBehaviour
 {
@@ -52,6 +65,18 @@ public class InteractiveController : MonoBehaviour
     [Range(0.05f, 1f)] public float sombraPlanoCercano = 0.3f;
     [Tooltip("Intensidad de la sombra (1 = negra; menos = deja pasar algo de luz ambiental).")]
     [Range(0f, 1f)] public float fuerzaSombra = 0.85f;
+    [Tooltip("Ronda 9: los maceteros proyectan sombra con su malla simple (último LOD). Desmarcar si aparecen manchas de sombra raras sobre los canales.")]
+    public bool sombraConMallaSimple = true;
+
+    [Header("Conos de las lámparas (Ronda 10)")]
+    [Tooltip("Cerrar los conos de las Spot Lights al iniciar. Desmarcar para dejar los valores de la escena (100°, 5 m).")]
+    public bool ajustarConos = true;
+    [Tooltip("Apertura del cono (grados). En la escena estaba en 100.")]
+    [Range(30f, 120f)] public float anguloCono = 70f;
+    [Tooltip("Alcance de la luz (m). En la escena estaba en 5.")]
+    [Range(2f, 8f)] public float alcanceLampara = 4f;
+    [Tooltip("En calidad Baja, solo la lámpara más cercana a cada macetero proyecta sombra (4 de 8).")]
+    public bool sombrasReducidasEnBaja = true;
 
     [Header("Simulación de Agua")]
     public GameObject sistemaAguaPVC;
@@ -78,6 +103,8 @@ public class InteractiveController : MonoBehaviour
     private RiegoNFT riego;
     private CalidadGrafica calidad;
     private Light[] lucesSpot = new Light[0];
+    // true = esta lámpara proyecta sombra también en calidad Baja (una por macetero).
+    private bool[] sombraEnBaja = new bool[0];
 
     /// <summary>Animación de riego por etapas (null si no hay sistema de agua).</summary>
     public RiegoNFT Riego { get { return riego; } }
@@ -98,6 +125,7 @@ public class InteractiveController : MonoBehaviour
 
     // Valores originales de la escena (se restauran al volver a "día").
     private float intensidadLuzDia = 1f;
+    private LightShadows sombraSolDia = LightShadows.Soft;
     private float intensidadAmbienteDia = 1f;
     private Material skyboxOriginal;
 
@@ -147,7 +175,11 @@ public class InteractiveController : MonoBehaviour
         }
 
         // Guardar el "día" tal como está configurado en la escena.
-        if (luzDireccional != null) intensidadLuzDia = luzDireccional.intensity;
+        if (luzDireccional != null)
+        {
+            intensidadLuzDia = luzDireccional.intensity;
+            sombraSolDia = luzDireccional.shadows;
+        }
         intensidadAmbienteDia = RenderSettings.ambientIntensity;
         skyboxOriginal = RenderSettings.skybox;
     }
@@ -174,6 +206,10 @@ public class InteractiveController : MonoBehaviour
 
     private void Start()
     {
+        // Ronda 10: conos más cerrados y elección de las lámparas con sombra en Baja.
+        if (ajustarConos) AjustarConos();
+        ElegirSombrasEnBaja();
+
         // Sombras según la calidad actual (CalidadGrafica ya eligió su nivel en su Awake).
         calidad = GetComponent<CalidadGrafica>();
         if (calidad == null)
@@ -192,6 +228,13 @@ public class InteractiveController : MonoBehaviour
         else
         {
             AplicarSombras(NivelCalidad.Baja);
+        }
+
+        // Ronda 9: sombras de los maceteros con la malla simple (una sola vez).
+        if (sombraConMallaSimple)
+        {
+            int n = SombrasLOD.Aplicar(gameObject.scene);
+            if (n > 0) Debug.Log("[InteractiveController] Sombra con malla simple en " + n + " maceteros.", this);
         }
 
         if (riego != null)
@@ -261,13 +304,67 @@ public class InteractiveController : MonoBehaviour
                           : nivel == NivelCalidad.Alta ? LightShadows.Soft
                           : LightShadows.Hard;
 
+        bool baja = nivel != NivelCalidad.Alta;
         for (int i = 0; i < lucesSpot.Length; i++)
         {
             Light l = lucesSpot[i];
             if (l == null) continue;
-            l.shadows = tipo;
+            // Ronda 10: en Baja, solo una lámpara por macetero proyecta sombra.
+            bool conSombra = !(baja && sombrasReducidasEnBaja && i < sombraEnBaja.Length && !sombraEnBaja[i]);
+            l.shadows = conSombra ? tipo : LightShadows.None;
             l.shadowNearPlane = sombraPlanoCercano;
             l.shadowStrength = fuerzaSombra;
+        }
+    }
+
+    /// <summary>Ronda 10: cierra el cono y el alcance de las Spot Lights (la escena guardada no cambia).</summary>
+    private void AjustarConos()
+    {
+        for (int i = 0; i < lucesSpot.Length; i++)
+        {
+            Light l = lucesSpot[i];
+            if (l == null || l.type != LightType.Spot) continue;
+            // Mantiene la proporción entre el cono interior y el exterior (70/100 en la escena).
+            float proporcion = l.spotAngle > 0f ? Mathf.Clamp01(l.innerSpotAngle / l.spotAngle) : 0.7f;
+            l.spotAngle = anguloCono;
+            l.innerSpotAngle = anguloCono * proporcion;
+            l.range = alcanceLampara;
+        }
+    }
+
+    /// <summary>
+    /// Ronda 10: marca, para cada macetero (LOD Group), la lámpara más cercana en el plano
+    /// horizontal. Esas proyectan sombra en calidad Baja. Sin LOD Groups: una de cada dos.
+    /// </summary>
+    private void ElegirSombrasEnBaja()
+    {
+        sombraEnBaja = new bool[lucesSpot.Length];
+
+        var grupos = new System.Collections.Generic.List<LODGroup>(8);
+        GameObject[] raices = gameObject.scene.GetRootGameObjects();
+        for (int i = 0; i < raices.Length; i++)
+            grupos.AddRange(raices[i].GetComponentsInChildren<LODGroup>(true));
+
+        if (grupos.Count == 0)
+        {
+            for (int i = 0; i < sombraEnBaja.Length; i++) sombraEnBaja[i] = i % 2 == 0;
+            return;
+        }
+
+        for (int g = 0; g < grupos.Count; g++)
+        {
+            Vector3 centro = grupos[g].transform.TransformPoint(grupos[g].localReferencePoint);
+            int mejor = -1;
+            float mejorDist = float.MaxValue;
+            for (int i = 0; i < lucesSpot.Length; i++)
+            {
+                if (lucesSpot[i] == null || sombraEnBaja[i]) continue;
+                Vector3 d = lucesSpot[i].transform.position - centro;
+                d.y = 0f;
+                float dist = d.sqrMagnitude;
+                if (dist < mejorDist) { mejorDist = dist; mejor = i; }
+            }
+            if (mejor >= 0) sombraEnBaja[mejor] = true;
         }
     }
 
@@ -280,6 +377,8 @@ public class InteractiveController : MonoBehaviour
         if (luzDireccional != null)
         {
             luzDireccional.intensity = esNoche ? 0.0f : intensidadLuzDia;
+            // Ronda 9: de noche el sol no se ve, así que tampoco calcula sombras.
+            luzDireccional.shadows = esNoche ? LightShadows.None : sombraSolDia;
         }
 
         if (grupoSpotLights != null)
